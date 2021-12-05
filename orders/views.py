@@ -1,14 +1,14 @@
 from django.shortcuts import render, redirect
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from carts.models import CartItem
 from .forms import OrderForm
 import datetime
 from .models import Order, Payment, OrderProduct
-from store.models import Product
 import json
+from store.models import Product
 from django.core.mail import EmailMessage
 from django.template.loader import render_to_string
-# Create your views here.
+
 
 def payments(request):
     body = json.loads(request.body)
@@ -74,8 +74,6 @@ def payments(request):
     }
     return JsonResponse(data)
 
-
-
 def place_order(request, total=0, quantity=0,):
     current_user = request.user
 
@@ -92,9 +90,6 @@ def place_order(request, total=0, quantity=0,):
         quantity += cart_item.quantity
     tax = (2 * total)/100
     grand_total = total + tax
-
-
-
 
     if request.method == 'POST':
         form = OrderForm(request.POST)
@@ -138,3 +133,29 @@ def place_order(request, total=0, quantity=0,):
     else:
         return redirect('checkout')
 
+
+def order_complete(request):
+    order_number = request.GET.get('order_number')
+    transID = request.GET.get('payment_id')
+
+    try:
+        order = Order.objects.get(order_number=order_number, is_ordered=True)
+        ordered_products = OrderProduct.objects.filter(order_id=order.id)
+
+        subtotal = 0
+        for i in ordered_products:
+            subtotal += i.product_price * i.quantity
+
+        payment = Payment.objects.get(payment_id=transID)
+
+        context = {
+            'order': order,
+            'ordered_products': ordered_products,
+            'order_number': order.order_number,
+            'transID': payment.payment_id,
+            'payment': payment,
+            'subtotal': subtotal,
+        }
+        return render(request, 'orders/order_complete.html', context)
+    except (Payment.DoesNotExist, Order.DoesNotExist):
+        return redirect('home')
